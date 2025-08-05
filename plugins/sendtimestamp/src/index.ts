@@ -1,117 +1,86 @@
-(function (e: any, i: any, t: any) {
-    "use strict";
-    const o = t.findByStoreName("UserStore");
-    let command: () => void;
+import { registerCommand } from "@vendetta/commands";
 
-    const r = {
-        onLoad: function () {
-            command = i.registerCommand({
-                name: "time",
-                displayName: "Time",
-                displayDescription: "Get the formatted timestamp",
-                description: "Get the formatted timestamp",
-                options: [
-                    {
-                        name: "time",
-                        description: "The time or offset to format",
-                        type: 3, // String type
-                        required: true,
-                        displayName: "time",
-                        displayDescription: "The time (e.g., 3pm, 3:14am, +5, +4:35)",
-                    },
-                    {
-                        name: "style",
-                        description: "The format style (optional)",
-                        type: 3, // String type
-                        required: false,
-                        displayName: "style",
-                        displayDescription: "short/long (time, date, date/time, relative)",
-                    },
-                ],
-                execute: executeCommand,
-                applicationId: "-1",
-                inputType: 1,
-                type: 1,
-            });
+let unregister: () => void;
+
+const plugin = {
+  onLoad() {
+    unregister = registerCommand({
+      name: "time",
+      displayName: "Time",
+      displayDescription: "Get a Discord‐formatted timestamp",
+      description: "Get a Discord‐formatted timestamp",
+      options: [
+        {
+          name: "time",
+          description: "The time or offset to format (e.g. 3pm, 14:05, +5, +4:35)",
+          type: 3,
+          required: true,
         },
-        onUnload: function () {
-            command();
+        {
+          name: "style",
+          description: "Format style: t/T/d/D/f/F/R (or aliases: st/lt/sd/ld/sdt/ldt/rel)",
+          type: 3,
+          required: false,
         },
-    };
+      ],
+      execute: this.executeCommand.bind(this),
+      applicationId: "-1",
+      inputType: 1,
+      type: 1,
+    });
+  },
 
-    async function executeCommand(args: { value: string }[]): Promise<{ content: string }> {
-        const timeInput = args[0].value;
-        const styleInput = args[1]?.value; // Optional style argument
+  onUnload() {
+    unregister?.();
+  },
 
-        let timestamp: number;
+  async executeCommand(args: any[]): Promise<{ content: string }> {
+    const timeInput = args[0].value as string;
+    const styleInput = (args[1]?.value as string)?.toLowerCase();
 
-        // Check for offset input (e.g., +5, +4:35)
-        const offsetMatch = timeInput.match(/^([+-]?)(\d+)(?::(\d+))?$/);
-        if (offsetMatch) {
-            const sign = offsetMatch[1] === '-' ? -1 : 1;
-            const hours = parseInt(offsetMatch[2], 10) || 0;
-            const minutes = parseInt(offsetMatch[3], 10) || 0;
-            const now = new Date();
-            now.setHours(now.getHours() + sign * hours);
-            now.setMinutes(now.getMinutes() + sign * minutes);
-            timestamp = Math.floor(now.getTime() / 1000);
-        } else {
-            // Check for time input (e.g., 3pm, 3:14am)
-            const timeMatch = timeInput.match(/(\d{1,2})(?::(\d{2}))?\s*([ap]m)?/i);
-            if (timeMatch) {
-                const hours = parseInt(timeMatch[1], 10);
-                const minutes = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
-                const ampm = timeMatch[3] ? timeMatch[3].toLowerCase() : '';
+    let date = new Date();
+    let ts: number;
 
-                const now = new Date();
-                now.setHours(ampm === 'pm' && hours < 12 ? hours + 12 : hours % 12);
-                now.setMinutes(minutes);
-                now.setSeconds(0);
-                now.setMilliseconds(0);
-                timestamp = Math.floor(now.getTime() / 1000);
-            } else {
-                return { content: "Please provide a valid time or offset." };
-            }
-        }
-
-        // Default format
-        let formattedTimestamp = `<t:${timestamp}>`;
-
-        // Map style input to corresponding format letter
-        let formatStyle = "";
-        if (styleInput) {
-            switch (styleInput.toLowerCase()) {
-                case "st":
-                    formatStyle = "t"; // Short time format
-                    break;
-                case "lt":
-                    formatStyle = "T"; // Long time format
-                    break;
-                case "sd":
-                    formatStyle = "d"; // Short date format
-                    break;
-                case "ld":
-                    formatStyle = "D"; // Long date format
-                    break;
-                case "sdt":
-                    formatStyle = "f"; // Short date/time format
-                    break;
-                case "ldt":
-                    formatStyle = "F"; // Long date/time format
-                    break;
-                case "r":
-                    formatStyle = "R"; // Relative time format
-                    break;
-            }
-        }
-
-        // If a valid format style is provided, append it to the timestamp
-        if (formatStyle) {
-            formattedTimestamp = `<t:${timestamp}:${formatStyle}>`;
-        }
-
-        return { content: `Formatted Timestamp: ${formattedTimestamp}` };
+    // offset parsing…
+    const off = timeInput.match(/^([+-])(\d+)(?::(\d+))?$/);
+    if (off) {
+      const sign = off[1] === "-" ? -1 : 1;
+      const h = parseInt(off[2], 10);
+      const m = parseInt(off[3] ?? "0", 10);
+      date.setHours(date.getHours() + sign * h);
+      date.setMinutes(date.getMinutes() + sign * m);
+      ts = Math.floor(date.getTime() / 1000);
+    } else {
+      // clock‐time parsing…
+      const tm = timeInput.match(/^(\d{1,2})(?::(\d{2}))?\s*([ap]m)?$/i);
+      if (!tm) {
+        return { content: "Provide a valid time (e.g. `3pm`, `14:05`) or offset (`+5`, `-2:30`)." };
+      }
+      let h = parseInt(tm[1], 10);
+      const mm = parseInt(tm[2] ?? "0", 10);
+      const ampm = tm[3]?.toLowerCase();
+      if (ampm === "pm" && h < 12) h += 12;
+      if (ampm === "am" && h === 12) h = 0;
+      date.setHours(h, mm, 0, 0);
+      ts = Math.floor(date.getTime() / 1000);
     }
 
-    return (e.default = r), Object.defineProperty(e, "__esModule", { value: true }), e;
-})({}, vendetta.commands, vendetta.metro);
+    // style lookup…
+    const styleMap: Record<string,string> = {
+      t: "t", T: "T", d: "d", D: "D", f: "f", F: "F", R: "R",
+      st: "t", lt: "T", sd: "d", ld: "D", sdt: "f", ldt: "F", rel: "R",
+    };
+    let fmt = "t";
+    if (styleInput) {
+      const code = styleMap[styleInput];
+      if (!code) {
+        return { content: "Invalid style: use `t/T/d/D/f/F/R` or `st/lt/sd/ld/sdt/ldt/rel`." };
+      }
+      fmt = code;
+    }
+
+    return { content: `<t:${ts}:${fmt}>` };
+  },
+};
+
+export default plugin;
