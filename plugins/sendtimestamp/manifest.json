@@ -1,0 +1,14 @@
+{
+    "name": "Easy Timestamps",
+    "description": "Replace timestamps in messages you send",
+    "authors": [
+        {
+            "name": "Manguito",
+            "id": "609203718306398222"
+        }
+    ],
+    "main": "src/index.ts",
+    "vendetta": {
+        "icon": "ic_message_edit"
+    }
+}
